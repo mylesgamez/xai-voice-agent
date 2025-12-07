@@ -23,7 +23,9 @@
       "Bash(npm run build:*)",
       "WebFetch(domain:tw3.shadcn-svelte.com)",
       "Bash(source:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(pip freeze:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []

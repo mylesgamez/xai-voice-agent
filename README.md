@@ -1,379 +1,253 @@
-# XAI Voice Examples
+# AI Newscaster - Voice Server
 
-Examples for building voice applications with XAI's APIs. Includes web demos, phone integration, and standalone TTS/STT examples.
+The voice server component of AI Newscaster, powered by xAI's Grok Realtime Voice API. This server handles phone calls via Twilio, processes voice conversations with Grok, and integrates with the X (Twitter) API for personalized news and social media interactions.
 
-## XAI APIs
+## Overview
 
-All examples use XAI's production APIs. Get your API key at [console.x.ai](https://console.x.ai/).
+AI Newscaster is a voice-powered AI assistant that delivers personalized news briefings and manages your X account hands-free. Users call a phone number and interact with Grok, who acts as a professional news anchor capable of:
 
-### API Endpoints
+- Fetching trending news and topics from X
+- Reading posts from specific users
+- Checking and sending DMs (authenticated users)
+- Posting tweets on your behalf (authenticated users)
+- Providing personalized news based on who you follow
 
-| API | Endpoint | Description |
-|-----|----------|-------------|
-| **Realtime Voice** | `wss://api.x.ai/v1/realtime` | WebSocket for real-time voice conversations |
-| **Text-to-Speech** | `https://api.x.ai/v1/audio/speech` | Convert text to natural speech audio |
-| **Speech-to-Text** | `https://api.x.ai/v1/audio/transcriptions` | Transcribe audio files to text |
-
-### Base URL
-
-```bash
-# All HTTP APIs use this base URL
-https://api.x.ai/v1
-
-# WebSocket APIs use
-wss://api.x.ai/v1/realtime
-```
-
-### Authentication
-
-All APIs use Bearer token authentication:
-
-```bash
-# HTTP APIs
-curl https://api.x.ai/v1/audio/speech \
-  -H "Authorization: Bearer YOUR_XAI_API_KEY"
-
-# WebSocket APIs
-wss://api.x.ai/v1/realtime
-# Send API key in first message
-```
-
-### Available Models
-
-- **TTS Voices**: Ara, Rex, Sal, Eve, Una, Leo (TTS) Multilingual
-- **Transcription** Multilingual 
-
-**Full API Documentation:** [x.ai/api](https://x.ai/api)
-
-## Quick Start
-
-Choose your use case and get started in minutes:
-
-### Web Voice Agent
-
-Real-time voice chat in your browser with React frontend and Python/Node.js backends.
-
-**WebSocket Version** (Simplest):
-```bash
-# Start backend (Python or Node.js)
-cd examples/agent/web/xai/backend-python
-./start.sh
-
-# Start frontend (in another terminal)
-cd examples/agent/web/client
-./start.sh
-
-# Open http://localhost:5173
-```
-
-**WebRTC Version** (Lower latency + connection stats):
-```bash
-# Start server (Node.js WebRTC relay)
-cd examples/agent/webrtc/server
-./start.sh
-
-# Start client (in another terminal)
-cd examples/agent/webrtc/client
-./start.sh
-
-# Open http://localhost:5173
-```
-
-### Phone Voice Agent
-
-Voice agent accessible via phone call using Twilio integration.
-
-```bash
-cd examples/agent/telephony/xai
-npm install
-# Configure .env with XAI_API_KEY and Twilio credentials
-npm run dev
-```
-
-### Text-to-Speech (TTS)
-
-Convert text to speech with 6 different voices (Ara, Rex, Sal, Eve, Una, Leo).
-
-```bash
-# Python
-cd examples/tts/python
-./start.sh
-
-# Node.js
-cd examples/tts/nodejs
-./start.sh
-```
-
-### Speech-to-Text (STT)
-
-Transcribe audio files to text (supports MP3, WAV, mono/stereo).
-
-```bash
-# Python
-cd examples/stt/python
-./start.sh
-
-# Node.js
-cd examples/stt/nodejs
-./start.sh
-```
-
-## What's Included
-
-### Voice Agents
-
-| Example | Type | Stack | Features |
-|---------|------|-------|----------|
-| **Web Voice Agent** | Browser | React + Python/Node.js | Real-time voice, WebSocket, Debug console |
-| **WebRTC Voice Agent** | Browser | React + Node.js | Low-latency WebRTC, Connection stats, PCM16 audio |
-| **Telephony Agent** | Phone | Node.js + Twilio | Phone calls, Real-time voice, Function calling |
-
-### API Examples
-
-| Example | Languages | Features |
-|---------|-----------|----------|
-| **TTS** | Python + Node.js | 6 voices, Multiple formats (MP3, WAV, etc.) |
-| **STT** | Python + Node.js | MP3/WAV support, Batch processing |
-
-## Use Cases
-
-### Build a Web Voice Assistant
-
-Perfect for customer support, virtual assistants, or voice-enabled web apps.
-
-**Option 1: WebSocket (Simplest)**
-```bash
-# Backend options: Python or Node.js
-cd examples/agent/web/xai/backend-python  # or backend-nodejs
-./start.sh
-
-# Frontend
-cd examples/agent/web/client
-./start.sh
-```
-
-**Features:**
-- Real-time voice streaming
-- Visual transcript display
-- Debug console for development
-- Interchangeable backends (Python/Node.js)
-
-**Option 2: WebRTC (Advanced)**
-```bash
-# Server (Node.js only)
-cd examples/agent/webrtc/server
-./start.sh
-
-# Client
-cd examples/agent/webrtc/client
-./start.sh
-```
-
-**Additional Features:**
-- Lower latency (~50-100ms)
-- Connection quality monitoring (bitrate, jitter, packet loss, RTT)
-- STUN/TURN support for NAT traversal
-- DataChannel-based communication
-
-### Build a Phone Voice Agent
-
-Create AI agents accessible via phone calls for IVR systems, voice surveys, or call centers.
-
-```bash
-cd examples/agent/telephony/xai
-npm install
-# Configure Twilio credentials in .env
-npm run dev
-```
-
-**Features:**
-- Phone call integration
-- Real-time voice processing
-- Function/tool calling support
-- Production-ready architecture
-
-### Add Voice Features to Your App
-
-Use standalone TTS and STT APIs to add voice capabilities to existing applications.
-
-**TTS - Convert Text to Natural Speech:**
-- 6 voice options (male/female)
-- Multiple audio formats
-- Batch processing support
-
-**STT - Transcribe Audio to Text:**
-- Multiple audio formats
-- High-accuracy transcription
-- Batch processing support
-
-## Environment Setup
-
-Each example includes a `.env.example` file. Copy it and add your API keys:
-
-```bash
-# In any example directory
-cp .env.example .env
-
-# Edit .env and add your keys
-XAI_API_KEY=your_xai_api_key_here
-```
-
-### Get API Keys
-
-- **XAI API Key**: [console.x.ai](https://console.x.ai/)
-- **Twilio Credentials**: [console.twilio.com](https://console.twilio.com/) (for telephony examples)
-
-## Text-to-Speech (TTS)
-
-Convert text to natural-sounding speech.
-
-**Available Voices:**
-- **Ara** (Female) - Default
-- **Rex** (Male)
-- **Sal** (Voice)
-- **Eve** (Female)
-- **Una** (Female)
-- **Leo** (Male)
-
-**Supported Formats:** MP3, WAV, Opus, FLAC, PCM
-
-```bash
-# Quick start
-cd examples/tts/python && ./start.sh
-# Generates audio files for all 6 voices
-```
-
-[Full TTS Documentation →](examples/tts/README.md)
-
-## Speech-to-Text (STT)
-
-Transcribe audio files to text with high accuracy.
-
-**Supported Formats:** MP3, WAV (mono/stereo)
-
-```bash
-# Quick start
-cd examples/stt/python && ./start.sh
-# Transcribes all test audio files
-```
-
-[Full STT Documentation →](examples/stt/README.md)
-
-## Web Agent Architecture
-
-The web agent examples demonstrate production-ready architectures:
-
-**WebSocket Architecture** (Simplest):
-```
-┌─────────────┐      WebSocket       ┌─────────────┐      WebSocket       ┌─────────┐
-│   Browser   │ ←──────────────────→ │   Backend   │ ←──────────────────→ │   XAI   │
-│  (React)    │   Audio + Messages   │  (Py/Node)  │   Audio + Messages   │   API   │
-└─────────────┘                      └─────────────┘                      └─────────┘
-```
-
-**Backend Options:**
-- Python (FastAPI) or Node.js (Express)
-- Both expose identical API
-- Swap backends without frontend changes
-
-**WebRTC Architecture** (Advanced):
-```
-┌─────────────┐      WebRTC          ┌─────────────┐      WebSocket       ┌─────────┐
-│   Browser   │ ←──────────────────→ │   Server    │ ←──────────────────→ │   XAI   │
-│  (React)    │  DataChannel (PCM16) │  (Node.js)  │   Audio + Messages   │   API   │
-└─────────────┘                      └─────────────┘                      └─────────┘
-```
-
-**WebRTC Features:**
-- Lower latency (~50-100ms)
-- Connection quality stats
-- STUN/TURN NAT traversal
-- DataChannel for all communication
-
-**Frontend (Both):**
-- React + TypeScript + Vite
-- Real-time audio streaming
-- Transcript display
-- Debug console
-
-## Telephony Architecture
-
-Phone integration using Twilio:
+## Architecture
 
 ```
-┌─────────┐      SIP       ┌─────────┐   WebSocket    ┌──────────┐   WebSocket    ┌─────────┐
-│  Phone  │ ←────────────→ │ Twilio  │ ←────────────→ │  Server  │ ←────────────→ │   XAI   │
-│  Call   │                │         │                │ (Node.js)│                │   API   │
-└─────────┘                └─────────┘                └──────────┘                └─────────┘
++----------+     +----------+     +------------------+     +-------------+
+|  Phone   |---->|  Twilio  |---->|   Voice Server   |---->| xAI Grok    |
+|  Call    |<----|  Media   |<----|   (This Repo)    |<----| Realtime    |
++----------+     +----------+     +--------+---------+     +-------------+
+                                           |
+              +----------------------------+----------------------------+
+              |                            |                            |
+       +------v------+              +------v------+              +------v------+
+       |   Django    |              |   X API     |              | Transcripts |
+       |   Backend   |              |  (Twitter)  |              |   Storage   |
+       | (User Auth) |              |             |              |             |
+       +-------------+              +-------------+              +-------------+
 ```
 
-## 🛠️ Tech Stack
+## Voice Agent Capabilities
 
-### Web Examples
-- **Frontend**: React, TypeScript, Vite, Web Audio API
-- **Backend**: FastAPI (Python) or Express (Node.js)
-- **Communication**: WebSockets or WebRTC
-- **WebRTC**: werift (pure JavaScript WebRTC for Node.js)
+The Grok voice agent has access to **7 tools** for fetching data and performing actions:
 
-### Telephony Examples
+### Public Tools (No Authentication Required)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `search_news_topic` | Search X for recent posts about any topic | `topic` (string) |
+| `get_trending_news` | Fetch current trending topics with top posts | `country` (US/UK/CA/AU) |
+| `get_user_posts` | Get latest posts from a specific X user | `username` (string) |
+
+### Authenticated Tools (Requires X Account Link)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_my_following` | List X accounts the caller follows | None |
+| `get_direct_messages` | View recent DM conversations | `limit` (1-50) |
+| `send_dm` | Send a direct message to any user | `recipient_username`, `message` |
+| `post_tweet` | Post a tweet on the caller's behalf | `text` (max 280 chars) |
+
+## Voice Persona
+
+The agent uses the **Rex** voice and embodies a CNN/BBC-style news anchor personality:
+- Professional, confident, and authoritative
+- Conversational without being robotic
+- Delivers news in engaging broadcast format (~45-60 second segments)
+- Synthesizes posts into coherent narratives (doesn't just list items)
+
+## Authentication Flow
+
+```
+1. User calls phone number
+2. Twilio forwards call to voice server
+3. Server looks up user by phone number via Django API
+4. If authenticated (X account linked):
+   - Grok greets user by name
+   - All 7 tools available
+   - Can read DMs, post tweets, etc.
+5. If not authenticated:
+   - Generic greeting
+   - Only public tools available (search, trending, user posts)
+```
+
+## Tech Stack
+
 - **Runtime**: Node.js + TypeScript
-- **Integration**: Twilio Media Streams
-- **Communication**: WebSockets
+- **Web Framework**: Express.js
+- **Phone Integration**: Twilio Media Streams (WebSocket)
+- **AI/Voice**: xAI Grok Realtime API (WebSocket)
+- **Social API**: X API v2
+- **Backend**: Django REST Framework (separate repo)
 
-### TTS/STT Examples
-- **Languages**: Python 3.13+ or Node.js 18+
-- **HTTP Client**: requests (Python) or axios (Node.js)
+## Prerequisites
 
-**For production deployment:**
-- Add authentication/authorization
-- Implement rate limiting
-- Use HTTPS/WSS
-- Enable security headers
-- Monitor API usage
+- Node.js 18+
+- Twilio account with a phone number
+- xAI API key ([console.x.ai](https://console.x.ai))
+- X API Bearer Token ([developer.x.com](https://developer.x.com))
+- ngrok or similar tunneling service
+- Django backend running ([ai-newscaster](https://github.com/your-username/ai-newscaster) repo)
+
+## Installation
+
+```bash
+cd examples/agent/telephony/xai
+
+# Install dependencies
+npm install
+
+# Copy environment template
+cp .env.example .env
+```
+
+## Configuration
+
+Edit `.env` with your credentials:
+
+```env
+# Required - xAI API key for Grok voice
+XAI_API_KEY=your-xai-api-key
+
+# Required - Public hostname for Twilio webhooks
+HOSTNAME=your-ngrok-domain.ngrok-free.app
+
+# Required - X API Bearer Token (for public endpoints)
+X_BEARER_TOKEN=your-x-bearer-token
+
+# Required - Django backend URL (for user auth & transcripts)
+BACKEND_URL=http://localhost:8000
+
+# Optional - Server port (default: 3000)
+PORT=3000
+```
+
+## Running the Server
+
+### 1. Start ngrok tunnel
+
+```bash
+ngrok http 3000
+```
+
+Copy the ngrok domain (e.g., `abc123.ngrok-free.app`) to your `.env` file.
+
+### 2. Start the voice server
+
+```bash
+# Development with hot reload
+npm run dev
+
+# Production
+npm start
+```
+
+### 3. Configure Twilio webhooks
+
+In [Twilio Console](https://console.twilio.com), configure your phone number:
+
+| Setting | Value |
+|---------|-------|
+| Voice URL | `https://your-domain.ngrok-free.app/twiml` (POST) |
+| Status Callback | `https://your-domain.ngrok-free.app/call-status` (POST) |
+
+### 4. Start the Django backend
+
+See the [ai-newscaster](https://github.com/your-username/ai-newscaster) repo for backend setup.
+
+## Project Structure
+
+```
+examples/agent/telephony/xai/
+|-- src/
+|   |-- index.ts         # Express server, WebSocket orchestration, call handling
+|   |-- bot.ts           # Grok persona, voice config, system instructions
+|   |-- tools.ts         # Tool definitions and execution dispatcher
+|   |-- x-api.ts         # X API v2 integration (search, trends, DMs, tweets)
+|   |-- user-auth.ts     # Phone-based user lookup via Django backend
+|   |-- twilio.ts        # Twilio Media Stream WebSocket wrapper
+|   +-- transcoder.ts    # Audio format conversion utilities
+|-- .env.example
+|-- package.json
++-- tsconfig.json
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/twiml` | POST | Twilio incoming call webhook - returns TwiML |
+| `/call-status` | POST | Twilio call status updates |
+| `/media-stream/:callId` | WebSocket | Bidirectional audio stream with Twilio |
+| `/` | GET | Health check |
+
+## Django Backend Integration
+
+The voice server communicates with the Django backend for:
+
+### User Authentication
+```
+GET /api/users/token?phone={phoneNumber}
+```
+Returns user info and OAuth tokens if the phone number is linked to an X account.
+
+### Transcript Storage
+```
+POST /api/conversations/                    # Create conversation
+POST /api/conversations/{id}/messages       # Save transcript message
+PATCH /api/conversations/{id}               # Mark conversation ended
+POST /api/conversations/{id}/generate-title # Generate title via LLM
+```
+
+## Audio Pipeline
+
+```
+Twilio (8kHz PCMU) --> Voice Server --> xAI Grok (8kHz PCMU)
+                   <--             <--
+```
+
+- **Input**: Twilio sends 8kHz mu-law (PCMU) audio
+- **Processing**: xAI handles speech recognition and synthesis
+- **Output**: xAI returns 8kHz mu-law audio directly
+- **VAD**: Server-side voice activity detection by xAI
+
+## Example Voice Commands
+
+### For Everyone
+- "What's trending right now?"
+- "Search for news about AI"
+- "What has @elonmusk been posting?"
+
+### For Authenticated Users
+- "Who do I follow?"
+- "Check my DMs"
+- "Send a DM to @friend saying hello"
+- "Tweet: Just tried AI Newscaster and it's amazing!"
 
 ## Troubleshooting
 
-### Common Issues
+### Call connects but no audio
+- Verify `HOSTNAME` in `.env` matches your ngrok domain
+- Check that ngrok is running and forwarding to port 3000
 
-**No API key:**
-```bash
-# Add to .env file
-echo "XAI_API_KEY=your-key-here" >> .env
-```
+### "User not authenticated" for all calls
+- Ensure Django backend is running at `BACKEND_URL`
+- Verify user has linked their X account via the web dashboard
 
-**Port already in use:**
-```bash
-# Kill process on port 8000
-lsof -ti:8000 | xargs kill
-```
+### X API errors
+- Check `X_BEARER_TOKEN` is valid
+- Verify X Developer App has required permissions
 
-**Module not found (Python):**
-```bash
-pip install -r requirements.txt
-```
+### Tool calls fail
+- Check server logs for detailed error messages
+- Verify OAuth tokens haven't expired (re-authenticate via web)
 
-**Dependencies missing (Node.js):**
-```bash
-npm install
-```
+## Related Repositories
 
-## Documentation
-
-- **[Web Agent Guide](examples/agent/web/README.md)** - WebSocket-based voice agent
-- **[WebRTC Agent Guide](examples/agent/webrtc/README.md)** - WebRTC-based voice agent (low latency)
-- **[Telephony Agent Guide](examples/agent/telephony/xai/README.md)** - Phone integration examples
-- **[TTS Guide](examples/tts/README.md)** - Text-to-Speech API
-- **[STT Guide](examples/stt/README.md)** - Speech-to-Text API
-- **[XAI API Docs](https://x.ai/api)** - Official API documentation
-
-## Getting Started
-
-1. **Choose your use case** (web agent, phone agent, TTS, or STT)
-2. **Navigate to the example directory**
-3. **Copy `.env.example` to `.env`** and add your API key
-4. **Run `./start.sh`** (or follow README in that directory)
-5. **Start building!**
+- **[ai-newscaster](https://github.com/your-username/ai-newscaster)** - Django backend + SvelteKit frontend
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+MIT
