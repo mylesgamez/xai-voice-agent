@@ -22,7 +22,8 @@
       "Bash(npx shadcn-svelte@1.0.0-next.10 init:*)",
       "Bash(npm run build:*)",
       "WebFetch(domain:tw3.shadcn-svelte.com)",
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

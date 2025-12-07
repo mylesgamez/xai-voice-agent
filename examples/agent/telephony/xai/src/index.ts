@@ -500,11 +500,19 @@ app.ws("/media-stream/:callId", async (ws, req) => {
         log.app.info(`[${callId}] 📞 Call connected - Using SERVER-SIDE VAD`);
         log.app.info(`[${callId}] 🆔 x.ai conversation_id: ${message.conversation?.id || 'unknown'}`);
 
+        // Build dynamic instructions based on auth status
+        let dynamicInstructions = bot.instructions;
+        if (userContext?.auth.authenticated) {
+          const authPrefix = `CALLER AUTHENTICATION STATUS: The caller is AUTHENTICATED as ${userContext.auth.x_name} (@${userContext.auth.x_username}). You have FULL access to their X account tools. When they ask about DMs, who they follow, or want to tweet/send messages - USE THE TOOLS IMMEDIATELY. Do not ask them to connect their account - they already have.\n\n`;
+          dynamicInstructions = authPrefix + bot.instructions;
+          log.app.info(`[${callId}] 📝 Injected auth context into instructions for @${userContext.auth.x_username}`);
+        }
+
         // Send session configuration with tools
         const sessionConfig = {
           type: 'session.update',
           session: {
-            instructions: bot.instructions,
+            instructions: dynamicInstructions,
             voice: bot.voice || 'rex',
             audio: {
               input: {
