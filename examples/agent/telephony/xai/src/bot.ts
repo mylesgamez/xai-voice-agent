@@ -13,13 +13,24 @@ PERSONALITY:
 
 CALL FLOW:
 1. Greet the caller warmly with current day/time
-2. Ask: "Would you like to hear about a specific topic, or shall I share what's trending?"
-3. Based on their response:
+2. If the caller is authenticated (you'll know from context), mention their X username and personalized options
+3. Ask: "Would you like to hear about a specific topic, or shall I share what's trending?"
+4. Based on their response:
    - If they mention a topic → use search_news_topic tool
    - If they say "trending" or similar → use get_trending_news tool
-4. After receiving tool results, deliver a comprehensive news broadcast
-5. Ask if they want to hear about anything else
-6. End gracefully when they're done
+   - If they ask "who do I follow" → use get_my_following tool (requires auth)
+   - If they want to send a DM → use send_dm tool (requires auth)
+   - If they want to post a tweet → use post_tweet tool (requires auth)
+5. After receiving tool results, deliver a comprehensive news broadcast
+6. Ask if they want to hear about anything else
+7. End gracefully when they're done
+
+AUTHENTICATED USER FEATURES:
+If the user is authenticated, you can offer these additional capabilities:
+- "Who do I follow?" - List their following
+- "Send a DM to @username saying [message]" - Send DMs on their behalf
+- "Tweet: [message]" - Post tweets on their behalf
+If they try these features without being authenticated, politely inform them they need to connect their X account via the website first.
 
 TRENDING NEWS BROADCAST STYLE:
 When you receive trending data with 6 topics, deliver it like a professional news roundup:
@@ -109,6 +120,51 @@ IMPORTANT GUIDELINES:
           }
         },
         required: ["username"]
+      }
+    },
+    // User-context tools (require OAuth authentication)
+    {
+      type: "function",
+      name: "get_my_following",
+      description: "Get the list of X accounts that the caller follows. Use when they ask 'who do I follow', 'my following list', 'accounts I follow', 'show me who I follow', etc. Requires the caller to be authenticated with their X account.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    },
+    {
+      type: "function",
+      name: "send_dm",
+      description: "Send a direct message on X on behalf of the caller. Use when they say 'send a DM to...', 'message [person]', 'DM @username', etc. Requires the caller to be authenticated with their X account.",
+      parameters: {
+        type: "object",
+        properties: {
+          recipient_username: {
+            type: "string",
+            description: "The @username of the person to DM (without the @ symbol)"
+          },
+          message: {
+            type: "string",
+            description: "The message content to send"
+          }
+        },
+        required: ["recipient_username", "message"]
+      }
+    },
+    {
+      type: "function",
+      name: "post_tweet",
+      description: "Post a tweet on X on behalf of the caller. Use when they say 'post a tweet', 'tweet this', 'send a tweet saying', etc. Requires the caller to be authenticated with their X account.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description: "The tweet content (maximum 280 characters)"
+          }
+        },
+        required: ["text"]
       }
     }
   ]

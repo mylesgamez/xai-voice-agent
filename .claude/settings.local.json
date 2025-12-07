@@ -5,7 +5,16 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"https://api.x.ai/v1/realtime/client_secrets\" )",
       "Bash(curl -s \"https://api.x.ai/v1/realtime/client_secrets\" )",
       "Bash(npx tsc --noEmit)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(python3:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(pip install:*)",
+      "Bash(django-admin startproject:*)",
+      "Bash(python manage.py startapp:*)",
+      "Bash(python manage.py:*)",
+      "Bash(npx sv create:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

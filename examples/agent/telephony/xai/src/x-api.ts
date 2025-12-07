@@ -275,6 +275,190 @@ export async function getTrendingNews(country: string = 'US'): Promise<string> {
   }
 }
 
+// ========================================
+// User-Context API Functions (require user OAuth token)
+// ========================================
+
+/**
+ * Helper for user-context authenticated requests
+ */
+async function xApiRequestWithUserToken<T>(
+  endpoint: string,
+  userAccessToken: string,
+  options: { method?: string; body?: string } = {}
+): Promise<T> {
+  const url = new URL(endpoint, X_API_BASE);
+
+  const response = await fetch(url.toString(), {
+    method: options.method || 'GET',
+    headers: {
+      'Authorization': `Bearer ${userAccessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: options.body,
+  });
+
+  const data = await response.json();
+  log.app.debug(`[X-API User] Endpoint: ${endpoint}`);
+  log.app.debug(`[X-API User] Status: ${response.status}`);
+  log.app.debug(`[X-API User] Response: ${JSON.stringify(data)}`);
+
+  return data as T;
+}
+
+/**
+ * Get users that the authenticated user follows
+ */
+export async function getMyFollowing(
+  userAccessToken: string,
+  xUserId: string
+): Promise<string> {
+  try {
+    const params = new URLSearchParams({
+      max_results: '50',
+      'user.fields': 'name,username,description',
+    });
+
+    const response = await xApiRequestWithUserToken<{
+      data?: Array<{ id: string; name: string; username: string; description?: string }>;
+      errors?: Array<{ title?: string; detail?: string; type?: string; status?: number }>;
+    }>(`/2/users/${xUserId}/following?${params.toString()}`, userAccessToken);
+
+    if (response.errors?.length) {
+      const error = response.errors[0];
+      return JSON.stringify({
+        success: false,
+        message: error.detail || error.title || 'Unknown error',
+        users: []
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      count: response.data?.length || 0,
+      users: response.data || []
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      message: `Error getting following: ${error}`,
+      users: []
+    });
+  }
+}
+
+/**
+ * Send a DM on behalf of the user
+ */
+export async function sendDM(
+  userAccessToken: string,
+  recipientId: string,
+  text: string
+): Promise<string> {
+  try {
+    const response = await xApiRequestWithUserToken<{
+      data?: { dm_conversation_id: string; dm_event_id: string };
+      errors?: Array<{ title?: string; detail?: string; type?: string; status?: number }>;
+    }>(
+      `/2/dm_conversations/with/${recipientId}/messages`,
+      userAccessToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      }
+    );
+
+    if (response.errors?.length) {
+      const error = response.errors[0];
+      return JSON.stringify({
+        success: false,
+        message: error.detail || error.title || 'Unknown error'
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      message: 'DM sent successfully'
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      message: `Error sending DM: ${error}`
+    });
+  }
+}
+
+/**
+ * Post a tweet on behalf of the user
+ */
+export async function postTweet(
+  userAccessToken: string,
+  text: string
+): Promise<string> {
+  try {
+    const response = await xApiRequestWithUserToken<{
+      data?: { id: string; text: string };
+      errors?: Array<{ title?: string; detail?: string; type?: string; status?: number }>;
+    }>(
+      '/2/tweets',
+      userAccessToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      }
+    );
+
+    if (response.errors?.length) {
+      const error = response.errors[0];
+      return JSON.stringify({
+        success: false,
+        message: error.detail || error.title || 'Unknown error'
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      tweet_id: response.data?.id,
+      message: 'Tweet posted successfully'
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      message: `Error posting tweet: ${error}`
+    });
+  }
+}
+
+/**
+ * Look up a user by username (needed to get recipient ID for DMs)
+ */
+export async function lookupUserByUsername(
+  userAccessToken: string,
+  username: string
+): Promise<{ id: string; name: string; username: string } | null> {
+  const cleanUsername = username.replace('@', '').trim();
+
+  try {
+    const response = await xApiRequestWithUserToken<{
+      data?: { id: string; name: string; username: string };
+      errors?: Array<{ title?: string; detail?: string; type?: string; status?: number }>;
+    }>(`/2/users/by/username/${cleanUsername}`, userAccessToken);
+
+    if (response.errors?.length || !response.data) {
+      return null;
+    }
+
+    return response.data;
+  } catch (error) {
+    log.app.error(`[X-API User] Error looking up user: ${error}`);
+    return null;
+  }
+}
+
+// ========================================
+// App-Context API Functions (use app bearer token)
+// ========================================
+
 /**
  * Get recent posts from a specific user (last 24 hours)
  */

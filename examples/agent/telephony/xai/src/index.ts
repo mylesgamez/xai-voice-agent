@@ -7,6 +7,10 @@ import log from "./logger";
 import type { CallStatus } from "./twilio";
 import { TwilioMediaStreamWebsocket } from "./twilio";
 import { executeToolCall, ToolName } from "./tools";
+import { initUserContext, cleanupCallContext, UserContext } from "./user-auth";
+
+// Store phone numbers by callId (set during /twiml, used during /media-stream)
+const callPhoneNumbers = new Map<string, string>();
 
 const { app } = ExpressWs(express());
 app.use(express.urlencoded({ extended: true })).use(express.json());
@@ -68,7 +72,10 @@ app.post("/twiml", async (req, res) => {
   try {
     // Generate a cryptographically secure call ID
     const callId = generateSecureId('call');
-    log.app.info(`[${callId}] Processing incoming call`);
+    log.app.info(`[${callId}] Processing incoming call from ${from}`);
+
+    // Store the phone number for this call (will be used to look up user auth)
+    callPhoneNumbers.set(callId, from);
 
     res.status(200);
     res.type("text/xml");
@@ -117,6 +124,21 @@ app.post("/call-status", async (req, res) => {
 app.ws("/media-stream/:callId", async (ws, req) => {
   const callId = req.params.callId;
   log.twl.info(`[${callId}] WebSocket initializing`);
+
+  // Get the phone number for this call and initialize user context
+  const phoneNumber = callPhoneNumbers.get(callId);
+  let userContext: UserContext | undefined;
+
+  if (phoneNumber) {
+    log.app.info(`[${callId}] Looking up user auth for ${phoneNumber}`);
+    userContext = await initUserContext(callId, phoneNumber);
+
+    if (userContext.auth.authenticated) {
+      log.app.info(`[${callId}] 🔐 User authenticated as @${userContext.auth.x_username}`);
+    } else {
+      log.app.info(`[${callId}] 👤 User not authenticated (no X account linked)`);
+    }
+  }
 
   const tw = new TwilioMediaStreamWebsocket(ws);
 
@@ -279,16 +301,31 @@ app.ws("/media-stream/:callId", async (ws, req) => {
       } else if (message.type === 'session.updated') {
         log.app.info(`[${callId}] ⚙️ Session updated - PCMU format confirmed with tools`);
 
-        // Generate dynamic greeting with current day/time
-        const now = new Date();
-        const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-        const timeStr = now.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        });
+        // Determine time of day for greeting
+        const hour = new Date().getHours();
+        const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
-        const greetingPrompt = `Greet the caller warmly. It's ${dayName}, ${timeStr}. Introduce yourself as their AI news anchor and ask if they'd like to hear about a specific topic or what's trending right now.`;
+        // Build greeting prompt based on user auth status
+        let greetingPrompt: string;
+        if (userContext?.auth.authenticated) {
+          // Extract unique authors from liked tweets for personalization
+          let circleContext = '';
+          if (userContext.auth.liked_tweets?.length) {
+            const likedAuthors = [...new Set(
+              userContext.auth.liked_tweets
+                .map(t => t.author_name || t.author_username)
+                .filter(name => name && name.length > 0)
+            )].slice(0, 3);
+
+            if (likedAuthors.length > 0) {
+              circleContext = `, or on what your circle's been talking about – like ${likedAuthors.join(', ')} from accounts you've been liking`;
+            }
+          }
+
+          greetingPrompt = `Greet ${userContext.auth.x_name} with "Good ${timeOfDay}, ${userContext.auth.x_name}." Then say you can brief them on global trends${circleContext}. End with "What sounds good?" Keep it concise and natural.`;
+        } else {
+          greetingPrompt = `Greet the caller with "Good ${timeOfDay}." Introduce yourself briefly as their AI news anchor and ask if they'd like to hear about global trends or a specific topic. Keep it concise.`;
+        }
 
         const conversationItem = {
           type: 'conversation.item.create',
@@ -447,6 +484,11 @@ app.ws("/media-stream/:callId", async (ws, req) => {
   ws.on("close", () => {
     log.app.info(`[${callId}] Twilio WebSocket closed, disconnecting x.ai`);
     xaiWs.close();
+
+    // Clean up call context and phone number mapping
+    cleanupCallContext(callId);
+    callPhoneNumbers.delete(callId);
+    log.app.info(`[${callId}] Call context cleaned up`);
   });
 });
 
