@@ -196,7 +196,22 @@ app.ws("/media-stream/:callId", async (ws, req) => {
   const callId = req.params.callId;
   log.twl.info(`[${callId}] WebSocket initializing`);
 
-  // Get the phone number for this call and initialize user context
+  // CRITICAL: Set up Twilio wrapper and start handler IMMEDIATELY
+  // The 'start' event arrives as soon as WebSocket connects - BEFORE any async ops complete
+  const tw = new TwilioMediaStreamWebsocket(ws);
+  let twilioReady = false;
+
+  // Deferred greeting check - called when Twilio is ready (after trySendGreeting is defined)
+  let pendingTwilioReady = false;
+
+  tw.on("start", (msg) => {
+    tw.streamSid = msg.start.streamSid;
+    twilioReady = true;
+    pendingTwilioReady = true; // Signal that we should try greeting
+    log.app.info(`[${callId}] Twilio WebSocket ready - streamSid: ${tw.streamSid}`);
+  });
+
+  // Now do async operations (user lookup, conversation creation)
   const phoneNumber = callPhoneNumbers.get(callId);
   let userContext: UserContext | undefined;
 
@@ -216,14 +231,6 @@ app.ws("/media-stream/:callId", async (ws, req) => {
       callConversationIds.set(callId, conversationId);
     }
   }
-
-  const tw = new TwilioMediaStreamWebsocket(ws);
-
-  // Set up Twilio start event handler IMMEDIATELY (before async operations)
-  tw.on("start", (msg) => {
-    tw.streamSid = msg.start.streamSid;
-    log.app.info(`[${callId}] Twilio WebSocket ready - streamSid: ${tw.streamSid}`);
-  });
 
   // Create raw WebSocket connection to x.ai (since RealtimeClient doesn't work)
   log.app.info(`[${callId}] Connecting to XAI API...`);
@@ -274,6 +281,84 @@ app.ws("/media-stream/:callId", async (ws, req) => {
     arguments: '',
   };
 
+  // Track if session is ready to receive audio (after session.updated)
+  // XAI defaults to 24kHz, we configure 8kHz PCMU - must wait for session.updated
+  let sessionReady = false;
+
+  // Track if greeting has been sent (to avoid duplicate greetings)
+  let greetingSent = false;
+
+  // Function to send greeting when both XAI session and Twilio are ready
+  const trySendGreeting = () => {
+    if (greetingSent || !sessionReady || !tw.streamSid) {
+      return; // Not ready yet or already sent
+    }
+    greetingSent = true;
+
+    log.app.info(`[${callId}] 🚀 Both XAI session and Twilio ready - sending greeting`);
+
+    // Determine time of day for greeting
+    const hour = new Date().getHours();
+    const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+
+    // Build greeting prompt based on user auth status
+    let greetingPrompt: string;
+    if (userContext?.auth.authenticated) {
+      // Extract unique authors from liked tweets for personalization
+      let circleContext = '';
+      if (userContext.auth.liked_tweets?.length) {
+        const likedAuthors = [...new Set(
+          userContext.auth.liked_tweets
+            .map(t => {
+              const name = t.author_name || t.author_username;
+              const username = t.author_username;
+              if (name && username && name !== username) {
+                return `${name} (@${username})`;
+              }
+              return username || name;
+            })
+            .filter(Boolean)
+        )].slice(0, 3);
+
+        if (likedAuthors.length > 0) {
+          circleContext = `, or on what your circle's been talking about – like ${likedAuthors.join(', ')} from accounts you've been liking`;
+        }
+      }
+
+      greetingPrompt = `Greet ${userContext.auth.x_name} with "Good ${timeOfDay}, ${userContext.auth.x_name}." Then say you can brief them on global trends${circleContext}. End with "What sounds good?" Keep it concise and natural.`;
+    } else {
+      greetingPrompt = `Greet the caller with "Good ${timeOfDay}." Introduce yourself briefly as their AI news anchor and ask if they'd like to hear about global trends or a specific topic. Keep it concise.`;
+    }
+
+    const conversationItem = {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: greetingPrompt
+          }
+        ]
+      }
+    };
+    logWebSocketEvent(callId, 'SEND', conversationItem);
+    xaiWs.send(JSON.stringify(conversationItem));
+
+    const responseCreate = { type: 'response.create' };
+    logWebSocketEvent(callId, 'SEND', responseCreate);
+    xaiWs.send(JSON.stringify(responseCreate));
+
+    log.app.info(`[${callId}] 📰 AI Newscaster greeting requested (${timeOfDay})`);
+  };
+
+  // Check if Twilio was ready before trySendGreeting was defined
+  if (pendingTwilioReady) {
+    log.app.info(`[${callId}] Twilio was already ready, checking if we can send greeting...`);
+    trySendGreeting();
+  }
+
   // Handle messages from x.ai WebSocket
   xaiWs.on('message', (data: Buffer) => {
     try {
@@ -289,11 +374,16 @@ app.ws("/media-stream/:callId", async (ws, req) => {
 
       if (message.type === 'response.output_audio.delta' && message.delta) {
         // Bot is speaking - sending audio to Twilio (PCMU format)
+        // Only send if Twilio streamSid is set (start event received)
+        if (!tw.streamSid) {
+          log.app.warn(`[${callId}] ⚠️ Cannot send audio to Twilio - streamSid not set yet`);
+          return;
+        }
         // XAI sends μ-law directly (native PCMU support), pass through without conversion
         tw.send({
           event: "media",
           media: { payload: message.delta },  // Pass through base64 μ-law directly
-          streamSid: tw.streamSid!,
+          streamSid: tw.streamSid,
         });
       } else if (message.type === 'response.output_audio_transcript.delta') {
         // Log bot's speech transcript and accumulate for storage
@@ -377,55 +467,24 @@ app.ws("/media-stream/:callId", async (ws, req) => {
           log.app.info(`[${callId}] 🤖 BOT FINISHED SPEAKING - Listening for user...`);
         }
       } else if (message.type === 'session.updated') {
-        log.app.info(`[${callId}] ⚙️ Session updated - PCMU format confirmed with tools`);
+        sessionReady = true;  // Now safe to send 8kHz audio
+        log.app.info(`[${callId}] ⚙️ Session updated - PCMU format confirmed, audio streaming enabled`);
 
-        // Determine time of day for greeting
-        const hour = new Date().getHours();
-        const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+        // Try to send greeting (will only work if Twilio streamSid is also ready)
+        trySendGreeting();
 
-        // Build greeting prompt based on user auth status
-        let greetingPrompt: string;
-        if (userContext?.auth.authenticated) {
-          // Extract unique authors from liked tweets for personalization
-          let circleContext = '';
-          if (userContext.auth.liked_tweets?.length) {
-            const likedAuthors = [...new Set(
-              userContext.auth.liked_tweets
-                .map(t => t.author_name || t.author_username)
-                .filter(name => name && name.length > 0)
-            )].slice(0, 3);
-
-            if (likedAuthors.length > 0) {
-              circleContext = `, or on what your circle's been talking about – like ${likedAuthors.join(', ')} from accounts you've been liking`;
+        // If Twilio isn't ready yet, poll briefly to catch it
+        if (!greetingSent) {
+          log.app.info(`[${callId}] ⏳ Waiting for Twilio streamSid before sending greeting...`);
+          const pollInterval = setInterval(() => {
+            if (tw.streamSid) {
+              clearInterval(pollInterval);
+              trySendGreeting();
             }
-          }
-
-          greetingPrompt = `Greet ${userContext.auth.x_name} with "Good ${timeOfDay}, ${userContext.auth.x_name}." Then say you can brief them on global trends${circleContext}. End with "What sounds good?" Keep it concise and natural.`;
-        } else {
-          greetingPrompt = `Greet the caller with "Good ${timeOfDay}." Introduce yourself briefly as their AI news anchor and ask if they'd like to hear about global trends or a specific topic. Keep it concise.`;
+          }, 50);
+          // Timeout after 3 seconds
+          setTimeout(() => clearInterval(pollInterval), 3000);
         }
-
-        const conversationItem = {
-          type: 'conversation.item.create',
-          item: {
-            type: 'message',
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: greetingPrompt
-              }
-            ]
-          }
-        };
-        logWebSocketEvent(callId, 'SEND', conversationItem);
-        xaiWs.send(JSON.stringify(conversationItem));
-
-        const responseCreate = { type: 'response.create' };
-        logWebSocketEvent(callId, 'SEND', responseCreate);
-        xaiWs.send(JSON.stringify(responseCreate));
-
-        log.app.info(`[${callId}] 📰 AI Newscaster greeting requested (${timeOfDay})`);
       } else if (message.type === 'conversation.created') {
         log.app.info(`[${callId}] 📞 Call connected - Using SERVER-SIDE VAD`);
         log.app.info(`[${callId}] 🆔 x.ai conversation_id: ${message.conversation?.id || 'unknown'}`);
@@ -530,6 +589,15 @@ app.ws("/media-stream/:callId", async (ws, req) => {
       audioPacketCount++;
 
       if (msg.media.track === 'inbound') {
+        // Don't send audio until session is configured for 8kHz PCMU
+        // XAI defaults to 24kHz - sending 8kHz before session.updated causes frame rate error
+        if (!sessionReady) {
+          if (audioPacketCount === 1) {
+            log.app.info(`[${callId}] ⏳ Waiting for session.updated before streaming audio...`);
+          }
+          return;
+        }
+
         // XAI accepts μ-law (PCMU) natively - pass through without conversion
         const mulawBase64 = msg.media.payload;
 
