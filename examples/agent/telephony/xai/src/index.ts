@@ -12,6 +12,77 @@ import { initUserContext, cleanupCallContext, UserContext } from "./user-auth";
 // Store phone numbers by callId (set during /twiml, used during /media-stream)
 const callPhoneNumbers = new Map<string, string>();
 
+// Store conversation IDs by callId (for transcript storage)
+const callConversationIds = new Map<string, string>();
+
+// Store bot transcript buffer by callId (accumulate deltas)
+const botTranscriptBuffers = new Map<string, string>();
+
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+
+// ========================================
+// Conversation/Transcript API Helpers
+// ========================================
+async function createConversation(phoneNumber: string, callId: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/conversations/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone_number: phoneNumber,
+        call_id: callId,
+        title: 'Phone Call'
+      })
+    });
+    if (response.ok) {
+      const data = await response.json() as { id: string };
+      log.app.info(`[${callId}] 📝 Conversation created: ${data.id}`);
+      return data.id;
+    }
+    log.app.warn(`[${callId}] Failed to create conversation: ${response.status}`);
+    return null;
+  } catch (error) {
+    log.app.error(`[${callId}] Error creating conversation:`, error);
+    return null;
+  }
+}
+
+async function sendTranscriptMessage(
+  callId: string,
+  conversationId: string,
+  role: 'user' | 'assistant',
+  content: string
+): Promise<void> {
+  try {
+    await fetch(`${BACKEND_URL}/api/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        role,
+        content,
+        source: 'voice',
+        generate_reply: false
+      })
+    });
+    log.app.debug(`[${callId}] 📝 Transcript saved (${role})`);
+  } catch (error) {
+    log.app.error(`[${callId}] Error saving transcript:`, error);
+  }
+}
+
+async function endConversation(callId: string, conversationId: string): Promise<void> {
+  try {
+    await fetch(`${BACKEND_URL}/api/conversations/${conversationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ended_at: new Date().toISOString() })
+    });
+    log.app.info(`[${callId}] 📝 Conversation ended`);
+  } catch (error) {
+    log.app.error(`[${callId}] Error ending conversation:`, error);
+  }
+}
+
 const { app } = ExpressWs(express());
 app.use(express.urlencoded({ extended: true })).use(express.json());
 
@@ -138,6 +209,12 @@ app.ws("/media-stream/:callId", async (ws, req) => {
     } else {
       log.app.info(`[${callId}] 👤 User not authenticated (no X account linked)`);
     }
+
+    // Create conversation in Django for transcript storage
+    const conversationId = await createConversation(phoneNumber, callId);
+    if (conversationId) {
+      callConversationIds.set(callId, conversationId);
+    }
   }
 
   const tw = new TwilioMediaStreamWebsocket(ws);
@@ -219,11 +296,12 @@ app.ws("/media-stream/:callId", async (ws, req) => {
           streamSid: tw.streamSid!,
         });
       } else if (message.type === 'response.output_audio_transcript.delta') {
-        // Log bot's speech transcript (PCMU format uses output_audio_transcript)
+        // Log bot's speech transcript and accumulate for storage
         log.app.info(`[${callId}] 🤖 Bot: "${message.delta}"`);
-      } else if (message.type === 'response.output_audio_transcript.delta') {
-        // Log bot's speech transcript
-        log.app.info(`[${callId}] 🤖 Bot: "${message.delta}"`);
+
+        // Accumulate bot transcript chunks
+        const currentBuffer = botTranscriptBuffers.get(callId) || '';
+        botTranscriptBuffers.set(callId, currentBuffer + (message.delta || ''));
       } else if (message.type === 'response.created') {
         log.app.info(`[${callId}] 🤖 BOT STARTED SPEAKING`);
       } else if (message.type === 'response.function_call_arguments.delta') {
@@ -347,7 +425,7 @@ app.ws("/media-stream/:callId", async (ws, req) => {
         logWebSocketEvent(callId, 'SEND', responseCreate);
         xaiWs.send(JSON.stringify(responseCreate));
 
-        log.app.info(`[${callId}] 📰 AI Newscaster greeting requested (${dayName}, ${timeStr})`);
+        log.app.info(`[${callId}] 📰 AI Newscaster greeting requested (${timeOfDay})`);
       } else if (message.type === 'conversation.created') {
         log.app.info(`[${callId}] 📞 Call connected - Using SERVER-SIDE VAD`);
         log.app.info(`[${callId}] 🆔 x.ai conversation_id: ${message.conversation?.id || 'unknown'}`);
@@ -399,6 +477,12 @@ app.ws("/media-stream/:callId", async (ws, req) => {
         // Log what the user said (transcribed speech)
         const transcript = message.transcript || '';
         log.app.info(`[${callId}] 👤 User said: "${transcript}"`);
+
+        // Send user transcript to Django
+        const conversationId = callConversationIds.get(callId);
+        if (conversationId && transcript.trim()) {
+          sendTranscriptMessage(callId, conversationId, 'user', transcript);
+        }
       } if (message.type === 'ping') {
         // Silently handle pings
       } else if (message.type === 'error') {
@@ -420,7 +504,16 @@ app.ws("/media-stream/:callId", async (ws, req) => {
       } else if (message.type === 'response.output_audio.done') {
         // Silently handle - audio generation completed
       } else if (message.type === 'response.output_audio_transcript.done') {
-        // Silently handle - transcript completed
+        // Bot finished speaking - send accumulated transcript to Django
+        const conversationId = callConversationIds.get(callId);
+        const fullTranscript = botTranscriptBuffers.get(callId) || '';
+
+        if (conversationId && fullTranscript.trim()) {
+          sendTranscriptMessage(callId, conversationId, 'assistant', fullTranscript);
+        }
+
+        // Clear the buffer for next response
+        botTranscriptBuffers.delete(callId);
       } else {
         // Log unknown events for debugging
         log.app.debug(`[${callId}] ❓ Unknown: ${message.type}`);
@@ -480,14 +573,22 @@ app.ws("/media-stream/:callId", async (ws, req) => {
     log.app.error(`[${callId}] Twilio WebSocket error:`, error);
   });
 
-  // Handle x.ai WebSocket close
-  ws.on("close", () => {
+  // Handle Twilio WebSocket close
+  ws.on("close", async () => {
     log.app.info(`[${callId}] Twilio WebSocket closed, disconnecting x.ai`);
     xaiWs.close();
 
-    // Clean up call context and phone number mapping
+    // End conversation in Django
+    const conversationId = callConversationIds.get(callId);
+    if (conversationId) {
+      await endConversation(callId, conversationId);
+    }
+
+    // Clean up call context and all mappings
     cleanupCallContext(callId);
     callPhoneNumbers.delete(callId);
+    callConversationIds.delete(callId);
+    botTranscriptBuffers.delete(callId);
     log.app.info(`[${callId}] Call context cleaned up`);
   });
 });

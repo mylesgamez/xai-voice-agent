@@ -14,7 +14,13 @@
       "Bash(python manage.py:*)",
       "Bash(npx sv create:*)",
       "Bash(npm create:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(cat:*)",
+      "Bash(sqlite3:*)",
+      "WebFetch(domain:www.shadcn-svelte.com)",
+      "Bash(npx shadcn-svelte@latest init:*)",
+      "Bash(npx shadcn-svelte@1.0.0-next.10 init:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []
