@@ -78,6 +78,17 @@ async function endConversation(callId: string, conversationId: string): Promise<
       body: JSON.stringify({ ended_at: new Date().toISOString() })
     });
     log.app.info(`[${callId}] 📝 Conversation ended`);
+
+    // Generate title and tags using LLM
+    try {
+      await fetch(`${BACKEND_URL}/api/conversations/${conversationId}/generate-title`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      log.app.info(`[${callId}] 📝 Title and tags generated`);
+    } catch (titleError) {
+      log.app.warn(`[${callId}] Failed to generate title:`, titleError);
+    }
   } catch (error) {
     log.app.error(`[${callId}] Error ending conversation:`, error);
   }
