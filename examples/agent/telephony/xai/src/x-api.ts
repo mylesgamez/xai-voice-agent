@@ -33,7 +33,10 @@ interface XUser {
 interface SearchResponse {
   data?: XPost[];
   includes?: { users?: XUser[] };
-  meta?: { result_count: number };
+  meta?: {
+    result_count: number;
+    next_token?: string;
+  };
   errors?: Array<{ message: string }>;
 }
 
@@ -86,13 +89,14 @@ async function xApiRequest<T>(endpoint: string): Promise<T> {
 
 /**
  * Search for posts about a specific topic (last 24 hours)
+ * Fetches 2 pages (up to 40 posts) for comprehensive coverage
  */
 export async function searchNewsTopic(topic: string): Promise<string> {
   const now = new Date();
   const endTime = new Date(now.getTime() - 15 * 1000); // 15 seconds ago (X API requires 10+ seconds)
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  const params = new URLSearchParams({
+  const baseParams = {
     query: `${topic} lang:en -is:retweet`,
     max_results: '20',
     start_time: yesterday.toISOString(),
@@ -101,22 +105,24 @@ export async function searchNewsTopic(topic: string): Promise<string> {
     'expansions': 'author_id',
     'user.fields': 'name,username',
     'sort_order': 'relevancy',
-  });
+  };
 
   try {
-    const response = await xApiRequest<SearchResponse>(
-      `/2/tweets/search/recent?${params.toString()}`
+    // Fetch page 1
+    const params1 = new URLSearchParams(baseParams);
+    const response1 = await xApiRequest<SearchResponse>(
+      `/2/tweets/search/recent?${params1.toString()}`
     );
 
-    if (response.errors && response.errors.length > 0) {
+    if (response1.errors && response1.errors.length > 0) {
       return JSON.stringify({
         success: false,
-        message: response.errors[0].message,
+        message: response1.errors[0].message,
         posts: []
       });
     }
 
-    if (!response.data || response.data.length === 0) {
+    if (!response1.data || response1.data.length === 0) {
       return JSON.stringify({
         success: false,
         message: `No recent posts found about "${topic}"`,
@@ -124,12 +130,35 @@ export async function searchNewsTopic(topic: string): Promise<string> {
       });
     }
 
-    // Map author IDs to usernames
+    // Collect posts and users from page 1
+    let allPosts: XPost[] = [...response1.data];
     const userMap = new Map<string, XUser>();
-    response.includes?.users?.forEach(user => userMap.set(user.id, user));
+    response1.includes?.users?.forEach(user => userMap.set(user.id, user));
 
-    // Format posts for summarization
-    const posts = response.data.slice(0, 10).map(post => ({
+    // Fetch page 2 if next_token exists
+    if (response1.meta?.next_token) {
+      const params2 = new URLSearchParams({
+        ...baseParams,
+        next_token: response1.meta.next_token,
+      });
+
+      try {
+        const response2 = await xApiRequest<SearchResponse>(
+          `/2/tweets/search/recent?${params2.toString()}`
+        );
+
+        if (response2.data) {
+          allPosts = [...allPosts, ...response2.data];
+        }
+        response2.includes?.users?.forEach(user => userMap.set(user.id, user));
+      } catch (e) {
+        // Page 2 failed, continue with page 1 results
+        log.app.warn(`[X-API] Page 2 fetch failed, using page 1 only: ${e}`);
+      }
+    }
+
+    // Format all posts for summarization
+    const posts = allPosts.map(post => ({
       text: post.text,
       author: userMap.get(post.author_id || '')?.name || 'Unknown',
       username: userMap.get(post.author_id || '')?.username || '',
@@ -242,6 +271,96 @@ export async function getTrendingNews(country: string = 'US'): Promise<string> {
       success: false,
       message: `Error fetching trends: ${error}`,
       trends: []
+    });
+  }
+}
+
+/**
+ * Get recent posts from a specific user (last 24 hours)
+ */
+export async function getUserPosts(username: string): Promise<string> {
+  // Step 1: Look up user ID from username
+  const cleanUsername = username.replace('@', '').trim();
+
+  try {
+    const userResponse = await xApiRequest<{
+      data?: { id: string; name: string; username: string };
+      errors?: Array<{ message: string }>;
+    }>(`/2/users/by/username/${cleanUsername}`);
+
+    if (userResponse.errors && userResponse.errors.length > 0) {
+      return JSON.stringify({
+        success: false,
+        message: userResponse.errors[0].message,
+        posts: []
+      });
+    }
+
+    if (!userResponse.data) {
+      return JSON.stringify({
+        success: false,
+        message: `User "${username}" not found`,
+        posts: []
+      });
+    }
+
+    const userId = userResponse.data.id;
+    const userName = userResponse.data.name;
+
+    // Step 2: Get user's recent tweets
+    const now = new Date();
+    const endTime = new Date(now.getTime() - 15 * 1000); // 15 seconds ago
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const params = new URLSearchParams({
+      max_results: '10',
+      start_time: yesterday.toISOString(),
+      end_time: endTime.toISOString(),
+      'tweet.fields': 'text,created_at,public_metrics',
+      exclude: 'retweets,replies'  // Only original posts
+    });
+
+    const tweetsResponse = await xApiRequest<SearchResponse>(
+      `/2/users/${userId}/tweets?${params.toString()}`
+    );
+
+    if (tweetsResponse.errors && tweetsResponse.errors.length > 0) {
+      return JSON.stringify({
+        success: false,
+        message: tweetsResponse.errors[0].message,
+        posts: []
+      });
+    }
+
+    if (!tweetsResponse.data || tweetsResponse.data.length === 0) {
+      return JSON.stringify({
+        success: false,
+        message: `No recent posts from ${userName} (@${cleanUsername}) in the last 24 hours`,
+        posts: []
+      });
+    }
+
+    const posts = tweetsResponse.data.map(post => ({
+      text: post.text,
+      created_at: post.created_at,
+      likes: post.public_metrics?.like_count || 0,
+      retweets: post.public_metrics?.retweet_count || 0,
+    }));
+
+    return JSON.stringify({
+      success: true,
+      user: {
+        name: userName,
+        username: cleanUsername
+      },
+      post_count: posts.length,
+      posts
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      message: `Error fetching posts from "${username}": ${error}`,
+      posts: []
     });
   }
 }

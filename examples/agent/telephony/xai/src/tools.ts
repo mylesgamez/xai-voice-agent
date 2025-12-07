@@ -1,7 +1,7 @@
-import { searchNewsTopic, getTrendingNews } from './x-api';
+import { searchNewsTopic, getTrendingNews, getUserPosts } from './x-api';
 import log from './logger';
 
-export type ToolName = 'search_news_topic' | 'get_trending_news';
+export type ToolName = 'search_news_topic' | 'get_trending_news' | 'get_user_posts';
 
 interface SearchNewsTopicArgs {
   topic: string;
@@ -11,7 +11,11 @@ interface GetTrendingNewsArgs {
   country?: string;
 }
 
-type ToolCallArgs = SearchNewsTopicArgs | GetTrendingNewsArgs;
+interface GetUserPostsArgs {
+  username: string;
+}
+
+type ToolCallArgs = SearchNewsTopicArgs | GetTrendingNewsArgs | GetUserPostsArgs;
 
 /**
  * Execute a tool call and return the result
@@ -36,6 +40,11 @@ export async function executeToolCall(
       case 'get_trending_news':
         const trendArgs = args as GetTrendingNewsArgs;
         result = await getTrendingNews(trendArgs.country || 'US');
+        break;
+
+      case 'get_user_posts':
+        const userArgs = args as GetUserPostsArgs;
+        result = await getUserPosts(userArgs.username);
         break;
 
       default:

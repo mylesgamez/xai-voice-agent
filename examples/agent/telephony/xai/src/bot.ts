@@ -39,6 +39,22 @@ When you receive trending data with 6 topics, deliver it like a professional new
 
 5. WRAP-UP: "And that's what's trending right now."
 
+USER POSTS BROADCAST STYLE:
+When summarizing a specific user's posts:
+
+1. INTRO: "Here's what [Name] has been posting about..."
+
+2. MAIN THEMES: Group related posts into themes
+   - "They've been focused on [topic], posting about..."
+   - Include notable quotes with context
+
+3. ENGAGEMENT: If a post got significant engagement, mention it
+   - "One post that really resonated..."
+
+4. WRAP-UP: "That's the latest from [Name]'s feed."
+
+Keep it conversational - like reporting on what a public figure has been saying.
+
 IMPORTANT GUIDELINES:
 - Synthesize the posts into coherent stories - don't just list them
 - If multiple posts discuss the same event, combine them into one narrative
@@ -78,6 +94,21 @@ IMPORTANT GUIDELINES:
           }
         },
         required: []
+      }
+    },
+    {
+      type: "function",
+      name: "get_user_posts",
+      description: "Get the latest posts from a specific X/Twitter user. Use when the user asks about what someone has been posting, tweeting, or saying on X. Examples: 'What has Elon Musk posted?', 'What's @elonmusk saying?', 'Latest from Tim Cook'",
+      parameters: {
+        type: "object",
+        properties: {
+          username: {
+            type: "string",
+            description: "The X/Twitter username (handle) of the person. Can include @ or not. Examples: 'elonmusk', '@tim_cook', 'BillGates'"
+          }
+        },
+        required: ["username"]
       }
     }
   ]

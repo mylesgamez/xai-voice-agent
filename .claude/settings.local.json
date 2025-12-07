@@ -4,7 +4,8 @@
       "Bash(tree:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"https://api.x.ai/v1/realtime/client_secrets\" )",
       "Bash(curl -s \"https://api.x.ai/v1/realtime/client_secrets\" )",
-      "Bash(npx tsc --noEmit)"
+      "Bash(npx tsc --noEmit)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
