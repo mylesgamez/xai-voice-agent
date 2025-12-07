@@ -19,6 +19,7 @@ CALL FLOW:
    - If they mention a topic → use search_news_topic tool
    - If they say "trending" or similar → use get_trending_news tool
    - If they ask "who do I follow" → use get_my_following tool (requires auth)
+   - If they ask "check my DMs" or "who am I messaging" → use get_direct_messages tool (requires auth)
    - If they want to send a DM → use send_dm tool (requires auth)
    - If they want to post a tweet → use post_tweet tool (requires auth)
 5. After receiving tool results, deliver a comprehensive news broadcast
@@ -28,6 +29,7 @@ CALL FLOW:
 AUTHENTICATED USER FEATURES:
 If the user is authenticated, you can offer these additional capabilities:
 - "Who do I follow?" - List their following
+- "Check my DMs" / "Who am I messaging?" - See recent DM conversations
 - "Send a DM to @username saying [message]" - Send DMs on their behalf
 - "Tweet: [message]" - Post tweets on their behalf
 If they try these features without being authenticated, politely inform them they need to connect their X account via the website first.
@@ -165,6 +167,21 @@ IMPORTANT GUIDELINES:
           }
         },
         required: ["text"]
+      }
+    },
+    {
+      type: "function",
+      name: "get_direct_messages",
+      description: "Get the caller's recent direct message conversations on X. Use when they ask 'check my DMs', 'who am I messaging', 'show my messages', 'read my DMs', etc. Returns recent conversations with usernames so they can then send messages. Requires the caller to be authenticated with their X account.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            description: "Maximum number of recent messages to retrieve (default: 20, max: 50)"
+          }
+        },
+        required: []
       }
     }
   ]

@@ -5,7 +5,8 @@ import {
   getMyFollowing,
   sendDM,
   postTweet,
-  lookupUserByUsername
+  lookupUserByUsername,
+  getDirectMessages
 } from './x-api';
 import { getCallContext, UserContext } from './user-auth';
 import log from './logger';
@@ -16,7 +17,8 @@ export type ToolName =
   | 'get_user_posts'
   | 'get_my_following'
   | 'send_dm'
-  | 'post_tweet';
+  | 'post_tweet'
+  | 'get_direct_messages';
 
 interface SearchNewsTopicArgs {
   topic: string;
@@ -43,13 +45,18 @@ interface PostTweetArgs {
   text: string;
 }
 
+interface GetDirectMessagesArgs {
+  limit?: number;
+}
+
 type ToolCallArgs =
   | SearchNewsTopicArgs
   | GetTrendingNewsArgs
   | GetUserPostsArgs
   | GetMyFollowingArgs
   | SendDMArgs
-  | PostTweetArgs;
+  | PostTweetArgs
+  | GetDirectMessagesArgs;
 
 /**
  * Execute a tool call and return the result
@@ -97,6 +104,11 @@ export async function executeToolCall(
       case 'post_tweet':
         const tweetArgs = args as PostTweetArgs;
         result = await handlePostTweet(callId, userContext, tweetArgs);
+        break;
+
+      case 'get_direct_messages':
+        const dmsArgs = args as GetDirectMessagesArgs;
+        result = await handleGetDirectMessages(callId, userContext, dmsArgs);
         break;
 
       default:
@@ -198,4 +210,25 @@ async function handlePostTweet(
   log.app.info(`[${callId}] Posting tweet for @${userContext.auth.x_username}`);
 
   return await postTweet(userContext.auth.access_token, args.text);
+}
+
+async function handleGetDirectMessages(
+  callId: string,
+  userContext: UserContext | undefined,
+  args: GetDirectMessagesArgs
+): Promise<string> {
+  if (!userContext?.auth.authenticated || !userContext.auth.access_token) {
+    return JSON.stringify({
+      success: false,
+      message: 'You need to connect your X account first. Visit our website to log in with X, then call back.',
+      conversations: []
+    });
+  }
+
+  log.app.info(`[${callId}] Getting direct messages for @${userContext.auth.x_username}`);
+
+  return await getDirectMessages(
+    userContext.auth.access_token,
+    args.limit || 20
+  );
 }

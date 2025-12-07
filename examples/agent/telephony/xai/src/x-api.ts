@@ -460,6 +460,100 @@ export async function lookupUserByUsername(
 // ========================================
 
 /**
+ * Get recent DM events for the authenticated user
+ * Returns conversations with sender info so the user knows who they're messaging
+ */
+export async function getDirectMessages(
+  userAccessToken: string,
+  limit: number = 20
+): Promise<string> {
+  try {
+    const params = new URLSearchParams({
+      max_results: Math.min(limit, 50).toString(),
+      event_types: 'MessageCreate',
+      'dm_event.fields': 'text,created_at,dm_conversation_id,sender_id',
+      'expansions': 'sender_id',
+      'user.fields': 'name,username'
+    });
+
+    const response = await xApiRequestWithUserToken<{
+      data?: Array<{
+        id: string;
+        text: string;
+        created_at: string;
+        event_type: string;
+        sender_id: string;
+        dm_conversation_id: string;
+      }>;
+      includes?: {
+        users?: Array<{ id: string; name: string; username: string }>
+      };
+      errors?: Array<{ title?: string; detail?: string }>;
+    }>(`/2/dm_events?${params.toString()}`, userAccessToken);
+
+    if (response.errors?.length) {
+      const error = response.errors[0];
+      return JSON.stringify({
+        success: false,
+        message: error.detail || error.title || 'Unknown error',
+        conversations: []
+      });
+    }
+
+    // Build user lookup map from includes
+    const userMap = new Map<string, { name: string; username: string }>();
+    response.includes?.users?.forEach(user => {
+      userMap.set(user.id, { name: user.name, username: user.username });
+    });
+
+    // Group messages by conversation and extract unique participants
+    const conversationMap = new Map<string, {
+      conversation_id: string;
+      participant: { name: string; username: string } | null;
+      last_message: string;
+      last_message_at: string;
+    }>();
+
+    for (const event of response.data || []) {
+      const convId = event.dm_conversation_id;
+      const sender = userMap.get(event.sender_id);
+
+      if (!conversationMap.has(convId)) {
+        conversationMap.set(convId, {
+          conversation_id: convId,
+          participant: sender || null,
+          last_message: event.text,
+          last_message_at: event.created_at
+        });
+      }
+    }
+
+    const conversations = Array.from(conversationMap.values());
+
+    return JSON.stringify({
+      success: true,
+      count: conversations.length,
+      conversations: conversations.map(c => ({
+        with: c.participant ? `${c.participant.name} (@${c.participant.username})` : 'Unknown',
+        username: c.participant?.username || '',
+        last_message_preview: c.last_message.substring(0, 50) + (c.last_message.length > 50 ? '...' : ''),
+        when: c.last_message_at
+      }))
+    });
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      message: `Error getting direct messages: ${error}`,
+      conversations: []
+    });
+  }
+}
+
+// ========================================
+// App-Context API Functions (use app bearer token)
+// ========================================
+
+/**
  * Get recent posts from a specific user (last 24 hours)
  */
 export async function getUserPosts(username: string): Promise<string> {
